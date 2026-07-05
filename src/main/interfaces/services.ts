@@ -6,6 +6,13 @@ export interface HolyricsConnectionStatus {
   executablePath?: string;
 }
 
+export interface HolyricsAutomationResult {
+  success: boolean;
+  confirmed: boolean;
+  logs: string[];
+  diagnosticPath?: string;
+}
+
 export interface IConfigurationService {
   get(): AppConfiguration;
   update(configuration: Partial<AppConfiguration>): AppConfiguration;
@@ -40,7 +47,7 @@ export interface IGladiaService {
 }
 
 export interface IHolyricsAutomationService {
-  open(reference: BibleReference): Promise<void>;
+  open(reference: BibleReference): Promise<HolyricsAutomationResult>;
   testConnection(holyricsPath?: string): Promise<HolyricsConnectionStatus>;
 }
 

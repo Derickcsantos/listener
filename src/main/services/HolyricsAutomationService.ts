@@ -6,6 +6,7 @@ import { basename, extname, join } from "node:path";
 import { promisify } from "node:util";
 import type { BibleReference } from "../../types/domain.js";
 import type {
+  HolyricsAutomationResult,
   HolyricsConnectionStatus,
   IConfigurationService,
   IHolyricsAutomationService,
@@ -21,7 +22,7 @@ export class HolyricsAutomationService implements IHolyricsAutomationService {
     private readonly logger: ILoggerService
   ) {}
 
-  async open(reference: BibleReference): Promise<void> {
+  async open(reference: BibleReference): Promise<HolyricsAutomationResult> {
     const configuration = this.configurationService.get();
     if (!configuration.holyricsPath) {
       throw new Error("Local do Holyrics nao configurado.");
@@ -29,7 +30,12 @@ export class HolyricsAutomationService implements IHolyricsAutomationService {
 
     const queries = buildReferenceQueries(reference);
     electron.clipboard.writeText(queries[0]);
-    const script = buildAutomationScript(queries);
+    const diagnosticPath = join(electron.app.getPath("userData"), "holyrics-automation-diagnostic.txt");
+    const script = buildAutomationScript(queries, diagnosticPath, {
+      book: getHolyricsBookName(reference.book),
+      chapter: reference.chapter,
+      verse: reference.verse
+    });
 
     try {
       const encodedScript = Buffer.from(script, "utf16le").toString("base64");
@@ -37,6 +43,16 @@ export class HolyricsAutomationService implements IHolyricsAutomationService {
         windowsHide: true
       });
       this.logger.info(`Opened reference in Holyrics: ${formatReference(reference)}`, stdout);
+      const logs = stdout
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter(Boolean);
+      return {
+        success: logs.some((line) => line.includes("RESULT:OK")),
+        confirmed: logs.some((line) => line.includes("CONFIRMED:true")),
+        logs,
+        diagnosticPath
+      };
     } catch (error) {
       this.logger.error("Holyrics automation failed.", error);
       throw error;
@@ -161,6 +177,79 @@ function buildReferenceQueries(reference: BibleReference): string[] {
   return Array.from(new Set([base, withVersion, short, spoken]));
 }
 
+function getHolyricsBookName(book: string): string {
+  return holyricsBookNames[book] ?? book;
+}
+
+const holyricsBookNames: Record<string, string> = {
+  Genesis: "Genesis",
+  Exodo: "Exodo",
+  Levitico: "Levitico",
+  Numeros: "Numeros",
+  Deuteronomio: "Deuteronomio",
+  Josue: "Josue",
+  Juizes: "Juizes",
+  Rute: "Rute",
+  "1 Samuel": "1 Samuel",
+  "2 Samuel": "2 Samuel",
+  "1 Reis": "1 Reis",
+  "2 Reis": "2 Reis",
+  "1 Cronicas": "1 Cronicas",
+  "2 Cronicas": "2 Cronicas",
+  Esdras: "Esdras",
+  Neemias: "Neemias",
+  Ester: "Ester",
+  Jo: "Jo",
+  Salmos: "Salmos",
+  Proverbios: "Proverbios",
+  Eclesiastes: "Eclesiastes",
+  Cantares: "Cantares",
+  Isaias: "Isaias",
+  Jeremias: "Jeremias",
+  Lamentacoes: "Lamentacoes",
+  Ezequiel: "Ezequiel",
+  Daniel: "Daniel",
+  Oseias: "Oseias",
+  Joel: "Joel",
+  Amos: "Amos",
+  Obadias: "Obadias",
+  Jonas: "Jonas",
+  Miqueias: "Miqueias",
+  Naum: "Naum",
+  Habacuque: "Habacuque",
+  Sofonias: "Sofonias",
+  Ageu: "Ageu",
+  Zacarias: "Zacarias",
+  Malaquias: "Malaquias",
+  Mateus: "Mateus",
+  Marcos: "Marcos",
+  Lucas: "Lucas",
+  Joao: "Joao",
+  Atos: "Atos",
+  Romanos: "Romanos",
+  "1 Corintios": "1 Corintios",
+  "2 Corintios": "2 Corintios",
+  Galatas: "Galatas",
+  Efesios: "Efesios",
+  Filipenses: "Filipenses",
+  Colossenses: "Colossenses",
+  "1 Tessalonicenses": "1 Tessalonicenses",
+  "2 Tessalonicenses": "2 Tessalonicenses",
+  "1 Timoteo": "1 Timoteo",
+  "2 Timoteo": "2 Timoteo",
+  Tito: "Tito",
+  Filemom: "Filemom",
+  Hebreus: "Hebreus",
+  Tiago: "Tiago",
+  "1 Pedro": "1 Pedro",
+  "2 Pedro": "2 Pedro",
+  "1 Joao": "1 Joao",
+  "2 Joao": "2 Joao",
+  "3 Joao": "3 Joao",
+  Judas: "Judas",
+  Apocalipse: "Apocalipse"
+};
+
 const bookAbbreviations: Record<string, string> = {
   Genesis: "Gn",
   Exodo: "Ex",
@@ -199,8 +288,10 @@ const bookAbbreviations: Record<string, string> = {
   Apocalipse: "Ap"
 };
 
-function buildAutomationScript(queries: string[]): string {
+function buildAutomationScript(queries: string[], diagnosticPath: string, reference: { book: string; chapter: number; verse: number }): string {
   const queriesJson = JSON.stringify(queries);
+  const diagnosticPathJson = JSON.stringify(diagnosticPath);
+  const referenceJson = JSON.stringify(reference);
   return `
 $ErrorActionPreference = "Stop"
 Add-Type -AssemblyName System.Windows.Forms
@@ -218,6 +309,12 @@ public class Win32 {
 
 $queries = ConvertFrom-Json @'
 ${queriesJson}
+'@
+$diagnosticPath = ConvertFrom-Json @'
+${diagnosticPathJson}
+'@
+$reference = ConvertFrom-Json @'
+${referenceJson}
 '@
 
 function Log($message) {
@@ -242,9 +339,29 @@ function Get-HolyricsWindow($process) {
   [System.Windows.Automation.AutomationElement]::FromHandle($process.MainWindowHandle)
 }
 
+function Normalize-Text($value) {
+  if (-not $value) { return "" }
+  $normalized = $value.ToString().ToLowerInvariant().Normalize([Text.NormalizationForm]::FormD)
+  return -join ($normalized.ToCharArray() | Where-Object { [Globalization.CharUnicodeInfo]::GetUnicodeCategory($_) -ne [Globalization.UnicodeCategory]::NonSpacingMark })
+}
+
 function Find-DescendantsByControlType($root, $controlType) {
   $condition = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty, $controlType)
   $root.FindAll([System.Windows.Automation.TreeScope]::Descendants, $condition)
+}
+
+function Write-Diagnostic($root) {
+  $lines = New-Object System.Collections.Generic.List[string]
+  $lines.Add("Holyrics UI Automation diagnostic - " + (Get-Date).ToString("s"))
+  $lines.Add("Window: " + $root.Current.Name)
+  $all = $root.FindAll([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.Condition]::TrueCondition)
+  $limit = [Math]::Min($all.Count, 250)
+  for ($i = 0; $i -lt $limit; $i++) {
+    $item = $all.Item($i)
+    $lines.Add(("ControlType={0}; Name={1}; AutomationId={2}; ClassName={3}; Enabled={4}" -f $item.Current.ControlType.ProgrammaticName, $item.Current.Name, $item.Current.AutomationId, $item.Current.ClassName, $item.Current.IsEnabled))
+  }
+  [IO.File]::WriteAllLines($diagnosticPath, $lines.ToArray(), [Text.Encoding]::UTF8)
+  Log "Diagnostico salvo em: $diagnosticPath"
 }
 
 function Try-Invoke($element) {
@@ -273,8 +390,8 @@ function Try-ClickBibleArea($root) {
   $controls += Find-DescendantsByControlType $root ([System.Windows.Automation.ControlType]::TabItem)
   $controls += Find-DescendantsByControlType $root ([System.Windows.Automation.ControlType]::MenuItem)
   foreach ($control in $controls) {
-    $name = [string]$control.Current.Name
-    if ($name -match "(?i)b[ií]blia|bible|vers[ií]culo|refer[eê]ncia") {
+    $name = Normalize-Text $control.Current.Name
+    if ($name -match "blia|bible|vers|refer") {
       if (Try-Invoke $control) {
         Log "Controle de Biblia acionado: $name"
         return $true
@@ -310,8 +427,8 @@ function Try-UiAutomationSearch($root, $query) {
   $edits += Find-DescendantsByControlType $root ([System.Windows.Automation.ControlType]::ComboBox)
   foreach ($edit in $edits) {
     if (-not $edit.Current.IsEnabled) { continue }
-    $name = [string]$edit.Current.Name
-    if ($name -notmatch "(?i)pesquis|buscar|localizar|refer|b[ií]blia|texto|filtro|search|find" -and $edits.Count -gt 1) {
+    $name = Normalize-Text $edit.Current.Name
+    if ($name -notmatch "pesquis|buscar|localizar|refer|blia|texto|filtro|search|find" -and $edits.Count -gt 1) {
       continue
     }
     if (Try-SetValue $edit $query) {
@@ -341,15 +458,57 @@ function Try-HotkeySearch($query) {
     [System.Windows.Forms.SendKeys]::SendWait("{ENTER}")
     Start-Sleep -Milliseconds 350
     Log "Pesquisa por atalho enviada com $hotkey: $query"
-    return $true
+    return $false
   }
   return $false
 }
 
+function Set-ClipboardText($value) {
+  [System.Windows.Forms.Clipboard]::SetText([string]$value)
+}
+
+function Paste-Value($value) {
+  Set-ClipboardText $value
+  Start-Sleep -Milliseconds 80
+  [System.Windows.Forms.SendKeys]::SendWait("^a")
+  Start-Sleep -Milliseconds 60
+  [System.Windows.Forms.SendKeys]::SendWait("^v")
+  Start-Sleep -Milliseconds 140
+}
+
+function Try-F7BibleFlow($reference) {
+  Log "Iniciando fluxo Holyrics F7: livro=$($reference.book), capitulo=$($reference.chapter), versiculo=$($reference.verse)"
+  [System.Windows.Forms.SendKeys]::SendWait("{F7}")
+  Start-Sleep -Milliseconds 600
+
+  Paste-Value $reference.book
+  [System.Windows.Forms.SendKeys]::SendWait("{ENTER}")
+  Log "Livro informado: $($reference.book)"
+  Start-Sleep -Milliseconds 450
+
+  Paste-Value $reference.chapter
+  [System.Windows.Forms.SendKeys]::SendWait("{ENTER}")
+  Log "Capitulo informado: $($reference.chapter)"
+  Start-Sleep -Milliseconds 450
+
+  Paste-Value $reference.verse
+  [System.Windows.Forms.SendKeys]::SendWait("{ENTER}")
+  Log "Versiculo informado: $($reference.verse)"
+  Start-Sleep -Milliseconds 450
+
+  [System.Windows.Forms.SendKeys]::SendWait("{ENTER}")
+  Start-Sleep -Milliseconds 450
+  Log "Texto acessado via fluxo F7."
+  return $true
+}
+
 $process = Focus-Holyrics
+Log "Janela encontrada: $($process.MainWindowTitle)"
 $root = Get-HolyricsWindow $process
-$success = $false
+Write-Diagnostic $root
+$success = Try-F7BibleFlow $reference
 foreach ($query in $queries) {
+  if ($success) { break }
   [System.Windows.Forms.Clipboard]::SetText($query)
   if (Try-UiAutomationSearch $root $query) {
     $success = $true
@@ -358,14 +517,16 @@ foreach ($query in $queries) {
 }
 if (-not $success) {
   foreach ($query in $queries) {
-    if (Try-HotkeySearch $query) {
-      $success = $true
-      break
-    }
+    Try-HotkeySearch $query | Out-Null
   }
 }
 if (-not $success) {
-  throw "Nao foi possivel localizar um campo de pesquisa no Holyrics."
+  Log "RESULT:PARTIAL"
+  Log "CONFIRMED:false"
+  Log "Nao consegui confirmar um campo de pesquisa por UI Automation. Enviei fallbacks por teclado, mas preciso do diagnostico salvo para ajustar ao Holyrics desta maquina."
+} else {
+  Log "RESULT:OK"
+  Log "CONFIRMED:true"
 }
 `;
 }

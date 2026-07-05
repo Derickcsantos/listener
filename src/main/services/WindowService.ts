@@ -115,7 +115,7 @@ export class WindowService {
       }
 
       try {
-        await this.holyricsAutomationService.open({
+        return await this.holyricsAutomationService.open({
           book: "Mateus",
           chapter: 20,
           verse: 2,

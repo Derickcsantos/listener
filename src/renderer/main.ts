@@ -326,11 +326,13 @@ async function testConnections(): Promise<void> {
 async function testHolyricsAutomation(): Promise<void> {
   try {
     elements.connectionResult.textContent = "Testando automacao do Holyrics com Mateus 20:2...";
-    await window.bibleListener.testHolyricsAutomation({
+    const result = await window.bibleListener.testHolyricsAutomation({
       holyricsPath: elements.holyricsPath.value.trim() || undefined,
       bibleVersion: elements.bibleVersion.value.trim() || "NAA"
     });
-    elements.connectionResult.textContent = "Automacao enviada ao Holyrics: Mateus 20:2.";
+    const status = result.confirmed ? "Automacao confirmada" : "Automacao parcial";
+    const diagnostic = result.diagnosticPath ? ` Diagnostico: ${result.diagnosticPath}` : "";
+    elements.connectionResult.textContent = `${status}. ${result.logs.join(" ")}${diagnostic}`;
   } catch (error) {
     elements.connectionResult.textContent = `Falha na automacao do Holyrics: ${readableError(error)}`;
   }
