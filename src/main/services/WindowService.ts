@@ -107,6 +107,28 @@ export class WindowService {
 
     electron.ipcMain.handle("reference:open", async (_event, reference: BibleReference) => this.openReference(reference));
     electron.ipcMain.handle("reference:ignoreMultiple", () => undefined);
+    electron.ipcMain.handle("holyrics:testAutomation", async (_event, configuration: Partial<AppConfiguration> = {}) => {
+      const current = this.configurationService.get();
+      const previousHolyricsPath = current.holyricsPath;
+      if (configuration.holyricsPath && configuration.holyricsPath !== previousHolyricsPath) {
+        this.configurationService.update({ holyricsPath: configuration.holyricsPath });
+      }
+
+      try {
+        await this.holyricsAutomationService.open({
+          book: "Mateus",
+          chapter: 20,
+          verse: 2,
+          version: current.bibleVersion || "NAA",
+          rawText: "Teste de automacao",
+          confidence: 1
+        });
+      } finally {
+        if (configuration.holyricsPath && previousHolyricsPath !== configuration.holyricsPath) {
+          this.configurationService.update({ holyricsPath: previousHolyricsPath });
+        }
+      }
+    });
     electron.ipcMain.handle("connections:test", async (_event, configuration: Partial<AppConfiguration> = {}) => {
       const errors: string[] = [];
       const warnings: string[] = [];
@@ -158,7 +180,9 @@ export class WindowService {
       return;
     }
 
-    await this.openReference(detection.references[0]);
+    await this.openReference(detection.references[0]).catch((error) => {
+      this.emitError(`Referencia detectada, mas falhou ao abrir no Holyrics: ${error instanceof Error ? error.message : String(error)}`);
+    });
   }
 
   private async openReference(reference: BibleReference): Promise<void> {
@@ -166,10 +190,15 @@ export class WindowService {
     const lastOpenedAt = this.openedReferences.get(key) ?? 0;
     if (Date.now() - lastOpenedAt < 5000) return;
 
-    await this.holyricsAutomationService.open(reference);
-    this.openedReferences.set(key, Date.now());
-    this.lastOpenedReference = reference;
-    this.mainWindow?.webContents.send("reference:last", reference);
+    try {
+      await this.holyricsAutomationService.open(reference);
+      this.openedReferences.set(key, Date.now());
+      this.lastOpenedReference = reference;
+      this.mainWindow?.webContents.send("reference:last", reference);
+    } catch (error) {
+      this.logger.error("Failed to open reference.", error);
+      throw error;
+    }
   }
 
   private emitError(message: string): void {

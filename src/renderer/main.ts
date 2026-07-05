@@ -78,6 +78,7 @@ app.innerHTML = `
       <div id="connectionResult" class="muted"></div>
       <div class="dialog-actions">
         <button id="testConnections" type="button">Testar conexao</button>
+        <button id="testHolyricsAutomation" type="button">Testar automacao</button>
         <button id="saveSettings" class="primary" type="button">Salvar</button>
       </div>
     </form>
@@ -115,6 +116,7 @@ const elements = {
   browseHolyrics: document.querySelector<HTMLButtonElement>("#browseHolyrics")!,
   saveSettings: document.querySelector<HTMLButtonElement>("#saveSettings")!,
   testConnections: document.querySelector<HTMLButtonElement>("#testConnections")!,
+  testHolyricsAutomation: document.querySelector<HTMLButtonElement>("#testHolyricsAutomation")!,
   connectionResult: document.querySelector<HTMLDivElement>("#connectionResult")!,
   choiceList: document.querySelector<HTMLDivElement>("#choiceList")!,
   ignoreChoices: document.querySelector<HTMLButtonElement>("#ignoreChoices")!
@@ -148,6 +150,7 @@ function bindEvents(): void {
   elements.browseHolyrics.addEventListener("click", () => void chooseHolyricsPath());
   elements.saveSettings.addEventListener("click", () => void saveSettings());
   elements.testConnections.addEventListener("click", () => void testConnections());
+  elements.testHolyricsAutomation.addEventListener("click", () => void testHolyricsAutomation());
   elements.ignoreChoices.addEventListener("click", () => elements.choiceDialog.close());
 
   window.bibleListener.onStatusChanged((status) => {
@@ -317,6 +320,19 @@ async function testConnections(): Promise<void> {
     elements.connectionResult.textContent = details ? `${summary} | ${details}` : summary;
   } catch (error) {
     elements.connectionResult.textContent = `Falha no teste: ${readableError(error)}`;
+  }
+}
+
+async function testHolyricsAutomation(): Promise<void> {
+  try {
+    elements.connectionResult.textContent = "Testando automacao do Holyrics com Mateus 20:2...";
+    await window.bibleListener.testHolyricsAutomation({
+      holyricsPath: elements.holyricsPath.value.trim() || undefined,
+      bibleVersion: elements.bibleVersion.value.trim() || "NAA"
+    });
+    elements.connectionResult.textContent = "Automacao enviada ao Holyrics: Mateus 20:2.";
+  } catch (error) {
+    elements.connectionResult.textContent = `Falha na automacao do Holyrics: ${readableError(error)}`;
   }
 }
 

@@ -43,7 +43,7 @@ export const bibleBooks: BibleBookDefinition[] = [
   { canonical: "Ageu", aliases: ["ageu"] },
   { canonical: "Zacarias", aliases: ["zacarias"] },
   { canonical: "Malaquias", aliases: ["malaquias"] },
-  { canonical: "Mateus", aliases: ["mateus"] },
+  { canonical: "Mateus", aliases: ["mateus", "matheus"] },
   { canonical: "Marcos", aliases: ["marcos"] },
   { canonical: "Lucas", aliases: ["lucas"] },
   { canonical: "Joao", aliases: ["joao", "evangelho de joao"] },

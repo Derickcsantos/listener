@@ -22,12 +22,29 @@ export class RegexParser implements IBibleReferenceParser {
     aliasEntries.sort((a, b) => b.alias.length - a.alias.length);
 
     for (const { canonical, alias } of aliasEntries) {
-      const expression = new RegExp(
+      const spokenExpression = new RegExp(
         `(?:^|\\s)${escapeRegExp(alias)}\\s+(?:capitulo\\s+)?(${numberPattern})\\s+(?:versiculo|verso)\\s+(${numberPattern})(?=$|\\s)`,
         "g"
       );
 
-      for (const match of normalized.matchAll(expression)) {
+      for (const match of normalized.matchAll(spokenExpression)) {
+        const chapter = parsePortugueseNumber(match[1]);
+        const verse = parsePortugueseNumber(match[2]);
+        if (!chapter || !verse) continue;
+
+        references.push({
+          book: canonical,
+          chapter,
+          verse,
+          version: this.configurationService.get().bibleVersion || "NAA",
+          rawText: match[0].trim(),
+          confidence: 0.95
+        });
+      }
+
+      const compactExpression = new RegExp(`(?:^|\\s)${escapeRegExp(alias)}\\s+(${numberPattern})\\s*:?\\s+(${numberPattern})(?=$|\\s)`, "g");
+
+      for (const match of normalized.matchAll(compactExpression)) {
         const chapter = parsePortugueseNumber(match[1]);
         const verse = parsePortugueseNumber(match[2]);
         if (!chapter || !verse) continue;

@@ -13,6 +13,7 @@ const api: BibleListenerApi = {
   openReference: (reference: BibleReference) => ipcRenderer.invoke("reference:open", reference),
   ignoreMultipleReferences: () => ipcRenderer.invoke("reference:ignoreMultiple"),
   testConnections: (configuration?: Partial<AppConfiguration>) => ipcRenderer.invoke("connections:test", configuration),
+  testHolyricsAutomation: (configuration?: Partial<AppConfiguration>) => ipcRenderer.invoke("holyrics:testAutomation", configuration),
   onStatusChanged: (callback) => subscribe("status:changed", callback),
   onTranscriptLine: (callback) => subscribe("transcript:line", callback),
   onLastReference: (callback) => subscribe("reference:last", callback),

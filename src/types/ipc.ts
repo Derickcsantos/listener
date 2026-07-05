@@ -19,6 +19,7 @@ export interface BibleListenerApi {
   openReference(reference: BibleReference): Promise<void>;
   ignoreMultipleReferences(): Promise<void>;
   testConnections(configuration?: Partial<AppConfiguration>): Promise<ConnectionTestResult>;
+  testHolyricsAutomation(configuration?: Partial<AppConfiguration>): Promise<void>;
   onStatusChanged(callback: (status: AppSnapshot["status"]) => void): () => void;
   onTranscriptLine(callback: (line: TranscriptLine) => void): () => void;
   onLastReference(callback: (reference: BibleReference) => void): () => void;
