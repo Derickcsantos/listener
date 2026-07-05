@@ -338,7 +338,9 @@ function startPcmStreaming(stream: MediaStream): void {
   processor.onaudioprocess = (event) => {
     const input = event.inputBuffer.getChannelData(0);
     const pcm = downsampleTo16BitPcm(input, context.sampleRate, 16000);
-    void window.bibleListener.sendAudioChunk(pcm.buffer);
+    const chunk = new ArrayBuffer(pcm.byteLength);
+    new Uint8Array(chunk).set(new Uint8Array(pcm.buffer, pcm.byteOffset, pcm.byteLength));
+    void window.bibleListener.sendAudioChunk(chunk);
   };
   source.connect(processor);
   processor.connect(context.destination);

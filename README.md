@@ -5,7 +5,7 @@ Aplicativo desktop em Electron, Node.js, TypeScript e Vite para escutar audio co
 ## Como rodar
 
 ```bash
-npm install --ignore-scripts
+npm install
 npm run build
 npm start
 ```
@@ -26,3 +26,12 @@ As chaves podem vir do ambiente (`GLADIA_API_KEY` e `GEMINI_API_KEY`) ou ser sal
 - As transcricoes ficam somente em memoria ate a exportacao.
 - O parser local trata referencias explicitas e chama Gemini apenas quando a frase parece uma referencia biblica incompleta ou ambigua.
 - A automacao do Holyrics fica isolada em `HolyricsAutomationService` e usa foco de janela, clipboard e teclas no Windows. Se for necessario maior precisao, essa classe pode ser substituida por uma integracao baseada em UI Automation sem mexer no restante do pipeline.
+
+## CI/CD
+
+O projeto possui pipelines de GitHub Actions para CI e Releases automatizadas:
+
+- Push ou pull request para `main` e `develop`: executa typecheck e build em Windows, Linux e macOS.
+- Tag `vX.Y.Z`: gera instaladores, cria uma GitHub Release e anexa os arquivos.
+
+Veja o guia completo em [docs/ci-cd.md](docs/ci-cd.md).

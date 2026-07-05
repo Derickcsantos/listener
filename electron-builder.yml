@@ -1,0 +1,70 @@
+appId: com.biblelistener.desktop
+productName: Bible Listener
+copyright: Copyright (c) 2026 Bible Listener
+
+directories:
+  buildResources: assets
+  output: release/${os}
+
+files:
+  - dist/**/*
+  - package.json
+
+asar: true
+compression: maximum
+removePackageScripts: true
+
+artifactName: ${productName}-${version}-${os}-${arch}.${ext}
+
+publish:
+  provider: github
+  releaseType: release
+
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+    - target: portable
+      arch:
+        - x64
+  executableName: Bible Listener
+  icon: assets/icon.ico
+  signAndEditExecutable: false
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Bible Listener
+
+portable:
+  artifactName: ${productName}-${version}-windows-portable-${arch}.${ext}
+
+linux:
+  icon: assets/icon.png
+  target:
+    - target: AppImage
+      arch:
+        - x64
+    - target: deb
+      arch:
+        - x64
+  category: Utility
+  maintainer: Bible Listener
+
+mac:
+  icon: assets/icon.icns
+  target:
+    - target: dmg
+      arch:
+        - x64
+        - arm64
+  category: public.app-category.utilities
+  hardenedRuntime: false
+  gatekeeperAssess: false
+
+dmg:
+  artifactName: ${productName}-${version}-mac-${arch}.${ext}

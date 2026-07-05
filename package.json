@@ -10,8 +10,12 @@
     "dev:renderer": "vite --host 127.0.0.1",
     "dev:main": "tsc -p tsconfig.main.json --watch --preserveWatchOutput",
     "build": "tsc -p tsconfig.main.json && vite build",
+    "ci": "npm run typecheck && npm run build",
     "start": "node scripts/start-electron.cjs .",
-    "dist": "npm run build && electron-builder",
+    "dist": "npm run build && electron-builder --publish never",
+    "dist:win": "npm run build && electron-builder --win --publish never",
+    "dist:linux": "npm run build && electron-builder --linux --publish never",
+    "dist:mac": "npm run build && electron-builder --mac --publish never",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.main.json --noEmit"
   },
   "dependencies": {
@@ -27,20 +31,5 @@
     "electron-builder": "^25.1.8",
     "typescript": "^5.7.2",
     "vite": "^6.0.3"
-  },
-  "build": {
-    "appId": "com.biblelistener.desktop",
-    "productName": "Bible Listener",
-    "files": [
-      "dist/**/*",
-      "package.json"
-    ],
-    "directories": {
-      "buildResources": "assets",
-      "output": "release"
-    },
-    "win": {
-      "target": "nsis"
-    }
   }
 }
