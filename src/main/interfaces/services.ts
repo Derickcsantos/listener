@@ -17,7 +17,7 @@ export interface IBibleReferenceParser {
 
 export interface IGeminiService {
   interpret(text: string): Promise<BibleReference[]>;
-  testConnection(): Promise<boolean>;
+  testConnection(apiKey?: string): Promise<boolean>;
 }
 
 export interface IBibleCommandDetector {
@@ -30,11 +30,12 @@ export interface IGladiaService {
   connect(): Promise<void>;
   disconnect(): Promise<void>;
   sendAudioChunk(chunk: ArrayBuffer): Promise<void>;
-  testConnection(): Promise<boolean>;
+  testConnection(apiKey?: string): Promise<boolean>;
 }
 
 export interface IHolyricsAutomationService {
   open(reference: BibleReference): Promise<void>;
+  testConnection(holyricsPath?: string): Promise<boolean>;
 }
 
 export interface IExportService {

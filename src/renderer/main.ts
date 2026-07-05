@@ -73,7 +73,7 @@ app.innerHTML = `
       <h2>Configuracoes</h2>
       <label class="field"><span>Gladia API Key</span><input id="gladiaKey" type="password" /></label>
       <label class="field"><span>Gemini API Key</span><input id="geminiKey" type="password" /></label>
-      <label class="field"><span>Local do Holyrics</span><div class="path-row"><input id="holyricsPath" /><button id="browseHolyrics" type="button">Escolher</button></div></label>
+      <label class="field"><span>Local do Holyrics</span><div class="path-row"><input id="holyricsPath" placeholder="Pasta do Holyrics ou Holyrics.exe" /><button id="browseHolyrics" type="button">Escolher</button></div></label>
       <label class="field"><span>Versao da Biblia</span><input id="bibleVersion" value="NAA" /></label>
       <div id="connectionResult" class="muted"></div>
       <div class="dialog-actions">
@@ -302,8 +302,18 @@ async function saveSettings(): Promise<void> {
 async function testConnections(): Promise<void> {
   try {
     elements.connectionResult.textContent = "Testando...";
-    const result = await window.bibleListener.testConnections();
-    elements.connectionResult.textContent = `Gladia: ${result.gladia ? "ok" : "falhou"} | Gemini: ${result.gemini ? "ok" : "falhou"}`;
+    const result = await window.bibleListener.testConnections({
+      gladiaApiKey: elements.gladiaKey.value.trim() || undefined,
+      geminiApiKey: elements.geminiKey.value.trim() || undefined,
+      holyricsPath: elements.holyricsPath.value.trim() || undefined,
+      bibleVersion: elements.bibleVersion.value.trim() || "NAA"
+    });
+    const summary = [
+      `Gladia: ${result.gladia ? "ok" : "falhou"}`,
+      `Gemini: ${result.gemini ? "ok" : "falhou"}`,
+      `Holyrics: ${result.holyrics ? "ok" : "falhou"}`
+    ].join(" | ");
+    elements.connectionResult.textContent = result.errors.length > 0 ? `${summary} | ${result.errors.join(" | ")}` : summary;
   } catch (error) {
     elements.connectionResult.textContent = `Falha no teste: ${readableError(error)}`;
   }

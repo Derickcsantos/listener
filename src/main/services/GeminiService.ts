@@ -69,8 +69,31 @@ export class GeminiService implements IGeminiService {
     }
   }
 
-  async testConnection(): Promise<boolean> {
-    const result = await this.interpret("Joao capitulo 3 versiculo 16");
-    return result.length > 0;
+  async testConnection(apiKey = this.configurationService.get().geminiApiKey): Promise<boolean> {
+    if (!apiKey) return false;
+
+    try {
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: "Responda somente OK." }] }],
+            generationConfig: { temperature: 0 }
+          })
+        }
+      );
+
+      if (!response.ok) {
+        const body = await response.text().catch(() => "");
+        throw new Error(`Gemini respondeu ${response.status}: ${body.slice(0, 200)}`);
+      }
+
+      return true;
+    } catch (error) {
+      this.logger.warn("Gemini connection test failed.", error);
+      return false;
+    }
   }
 }

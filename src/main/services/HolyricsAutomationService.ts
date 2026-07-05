@@ -1,5 +1,7 @@
 import * as electron from "electron";
 import { execFile } from "node:child_process";
+import { access, stat } from "node:fs/promises";
+import { join } from "node:path";
 import { promisify } from "node:util";
 import type { BibleReference } from "../../types/domain.js";
 import type { IConfigurationService, IHolyricsAutomationService, ILoggerService } from "../interfaces/services.js";
@@ -52,4 +54,46 @@ export class HolyricsAutomationService implements IHolyricsAutomationService {
       throw error;
     }
   }
+
+  async testConnection(holyricsPath = this.configurationService.get().holyricsPath): Promise<boolean> {
+    if (!holyricsPath) return false;
+
+    try {
+      await resolveHolyricsExecutable(holyricsPath);
+      if (process.platform !== "win32") {
+        return true;
+      }
+
+      const script = `
+        $process = Get-Process | Where-Object { $_.ProcessName -like "Holyrics*" -and $_.MainWindowHandle -ne 0 } | Select-Object -First 1
+        if ($process) { exit 0 }
+        exit 1
+      `;
+      await execFileAsync("powershell.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", script], {
+        windowsHide: true
+      });
+      return true;
+    } catch (error) {
+      this.logger.warn("Holyrics connection test failed.", error);
+      return false;
+    }
+  }
+}
+
+async function resolveHolyricsExecutable(holyricsPath: string): Promise<string> {
+  const info = await stat(holyricsPath);
+  const candidates = info.isDirectory()
+    ? [join(holyricsPath, "Holyrics.exe"), join(holyricsPath, "holyrics.exe")]
+    : [holyricsPath];
+
+  for (const candidate of candidates) {
+    try {
+      await access(candidate);
+      return candidate;
+    } catch {
+      // Try the next common executable name.
+    }
+  }
+
+  throw new Error("Executavel do Holyrics nao encontrado no caminho informado.");
 }

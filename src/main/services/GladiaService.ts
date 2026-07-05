@@ -86,8 +86,7 @@ export class GladiaService extends EventEmitter implements IGladiaService {
     this.socket.send(Buffer.from(chunk));
   }
 
-  async testConnection(): Promise<boolean> {
-    const apiKey = this.configurationService.get().gladiaApiKey;
+  async testConnection(apiKey = this.configurationService.get().gladiaApiKey): Promise<boolean> {
     if (!apiKey) return false;
 
     const response = await fetch("https://api.gladia.io/v2/live", {

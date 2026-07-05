@@ -1,5 +1,12 @@
 import type { AppConfiguration, AppSnapshot, AudioInputDevice, BibleReference, TranscriptLine } from "./domain.js";
 
+export interface ConnectionTestResult {
+  gladia: boolean;
+  gemini: boolean;
+  holyrics: boolean;
+  errors: string[];
+}
+
 export interface BibleListenerApi {
   getSnapshot(): Promise<AppSnapshot>;
   saveConfiguration(configuration: Partial<AppConfiguration>): Promise<AppConfiguration>;
@@ -10,7 +17,7 @@ export interface BibleListenerApi {
   finishSession(): Promise<string | undefined>;
   openReference(reference: BibleReference): Promise<void>;
   ignoreMultipleReferences(): Promise<void>;
-  testConnections(): Promise<{ gladia: boolean; gemini: boolean; errors: string[] }>;
+  testConnections(configuration?: Partial<AppConfiguration>): Promise<ConnectionTestResult>;
   onStatusChanged(callback: (status: AppSnapshot["status"]) => void): () => void;
   onTranscriptLine(callback: (line: TranscriptLine) => void): () => void;
   onLastReference(callback: (reference: BibleReference) => void): () => void;

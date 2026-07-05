@@ -1,6 +1,6 @@
 import * as electron from "electron";
 import { join } from "node:path";
-import type { AppStatus, AudioInputDevice, BibleReference } from "../../types/domain.js";
+import type { AppConfiguration, AppStatus, AudioInputDevice, BibleReference } from "../../types/domain.js";
 import type {
   IAudioService,
   IBibleCommandDetector,
@@ -69,7 +69,11 @@ export class WindowService {
     electron.ipcMain.handle("config:chooseHolyricsPath", async () => {
       const result = await electron.dialog.showOpenDialog({
         title: "Local do Holyrics",
-        properties: ["openDirectory"]
+        properties: ["openFile", "openDirectory"],
+        filters: [
+          { name: "Holyrics", extensions: ["exe"] },
+          { name: "Todos os arquivos", extensions: ["*"] }
+        ]
       });
       return result.canceled ? undefined : result.filePaths[0];
     });
@@ -102,17 +106,25 @@ export class WindowService {
 
     electron.ipcMain.handle("reference:open", async (_event, reference: BibleReference) => this.openReference(reference));
     electron.ipcMain.handle("reference:ignoreMultiple", () => undefined);
-    electron.ipcMain.handle("connections:test", async () => {
+    electron.ipcMain.handle("connections:test", async (_event, configuration: Partial<AppConfiguration> = {}) => {
       const errors: string[] = [];
-      const gladia = await this.gladiaService.testConnection().catch((error) => {
-        errors.push(String(error));
+      const current = this.configurationService.get();
+      const testConfiguration = { ...current, ...configuration };
+
+      const gladia = await this.gladiaService.testConnection(testConfiguration.gladiaApiKey).catch((error) => {
+        errors.push(`Gladia: ${String(error)}`);
         return false;
       });
-      const gemini = await this.geminiService.testConnection().catch((error) => {
-        errors.push(String(error));
+      const gemini = await this.geminiService.testConnection(testConfiguration.geminiApiKey).catch((error) => {
+        errors.push(`Gemini: ${String(error)}`);
         return false;
       });
-      return { gladia, gemini, errors };
+      const holyrics = await this.holyricsAutomationService.testConnection(testConfiguration.holyricsPath).catch((error) => {
+        errors.push(`Holyrics: ${String(error)}`);
+        return false;
+      });
+
+      return { gladia, gemini, holyrics, errors };
     });
   }
 
