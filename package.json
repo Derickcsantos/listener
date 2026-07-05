@@ -5,13 +5,12 @@
   "main": "dist/main/main.js",
   "author": "Bible Listener",
   "license": "MIT",
-  "type": "module",
   "scripts": {
     "dev": "concurrently \"npm:dev:renderer\" \"npm:dev:main\"",
     "dev:renderer": "vite --host 127.0.0.1",
     "dev:main": "tsc -p tsconfig.main.json --watch --preserveWatchOutput",
     "build": "tsc -p tsconfig.main.json && vite build",
-    "start": "electron .",
+    "start": "node scripts/start-electron.cjs .",
     "dist": "npm run build && electron-builder",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.main.json --noEmit"
   },

@@ -49,6 +49,7 @@ button.primary {
 
 .topbar,
 .toolbar,
+.app-message,
 .metrics,
 .transcript {
   background: #ffffff;
@@ -129,6 +130,23 @@ select {
   grid-template-columns: 2fr 1fr 1fr;
   gap: 16px;
   padding: 16px;
+}
+
+.app-message {
+  padding: 12px 14px;
+  border-color: #bdd7ee;
+  background: #eff6ff;
+  color: #1e3a8a;
+}
+
+.app-message[data-tone="error"] {
+  border-color: #fecaca;
+  background: #fef2f2;
+  color: #991b1b;
+}
+
+.app-message[hidden] {
+  display: none;
 }
 
 .metrics > div {

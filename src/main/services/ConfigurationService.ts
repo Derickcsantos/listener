@@ -1,4 +1,4 @@
-import { app } from "electron";
+import * as electron from "electron";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type { AppConfiguration } from "../../types/domain.js";
@@ -15,7 +15,7 @@ export class ConfigurationService implements IConfigurationService {
   private configuration: AppConfiguration;
 
   constructor(private readonly logger: ILoggerService) {
-    this.filePath = join(app.getPath("userData"), "config.json");
+    this.filePath = join(electron.app.getPath("userData"), "config.json");
     this.configuration = this.load();
   }
 

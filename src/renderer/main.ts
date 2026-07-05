@@ -6,15 +6,19 @@ const state: {
   configuration: AppConfiguration;
   devices: AudioInputDevice[];
   lines: TranscriptLine[];
+  devicesLoaded: boolean;
+  deviceError?: string;
   lastReference?: BibleReference;
   mediaStream?: MediaStream;
   audioContext?: AudioContext;
+  meterContext?: AudioContext;
   processor?: ScriptProcessorNode;
   meterFrame?: number;
 } = {
   status: "stopped",
   configuration: { bibleVersion: "NAA" },
   devices: [],
+  devicesLoaded: false,
   lines: []
 };
 
@@ -41,6 +45,7 @@ app.innerHTML = `
       <button id="settingsButton">Configuracoes</button>
       <button id="finishButton">Finalizar</button>
     </section>
+    <div id="appMessage" class="app-message" hidden></div>
 
     <section class="metrics">
       <div>
@@ -73,7 +78,7 @@ app.innerHTML = `
       <div id="connectionResult" class="muted"></div>
       <div class="dialog-actions">
         <button id="testConnections" type="button">Testar conexao</button>
-        <button id="saveSettings" class="primary" value="save">Salvar</button>
+        <button id="saveSettings" class="primary" type="button">Salvar</button>
       </div>
     </form>
   </dialog>
@@ -96,6 +101,7 @@ const elements = {
   stopButton: document.querySelector<HTMLButtonElement>("#stopButton")!,
   settingsButton: document.querySelector<HTMLButtonElement>("#settingsButton")!,
   finishButton: document.querySelector<HTMLButtonElement>("#finishButton")!,
+  appMessage: document.querySelector<HTMLDivElement>("#appMessage")!,
   lastReference: document.querySelector<HTMLDivElement>("#lastReference")!,
   lineCounter: document.querySelector<HTMLDivElement>("#lineCounter")!,
   meterBar: document.querySelector<HTMLSpanElement>("#meterBar")!,
@@ -117,10 +123,17 @@ const elements = {
 void bootstrap();
 
 async function bootstrap(): Promise<void> {
-  const snapshot = await window.bibleListener.getSnapshot();
-  applySnapshot(snapshot);
-  await loadDevices();
   bindEvents();
+  render();
+
+  try {
+    const snapshot = await window.bibleListener.getSnapshot();
+    applySnapshot(snapshot);
+  } catch (error) {
+    showMessage(`Falha ao carregar configuracoes: ${readableError(error)}`, "error");
+  }
+
+  await loadDevices();
   render();
   if (!state.configuration.holyricsPath) {
     openSettings();
@@ -155,11 +168,36 @@ function bindEvents(): void {
 }
 
 async function loadDevices(): Promise<void> {
-  await navigator.mediaDevices.getUserMedia({ audio: true });
-  const devices = await navigator.mediaDevices.enumerateDevices();
-  state.devices = devices
-    .filter((device) => device.kind === "audioinput")
-    .map((device) => ({ deviceId: device.deviceId, label: device.label || "Microfone sem nome" }));
+  state.deviceError = undefined;
+  state.devicesLoaded = false;
+  render();
+
+  try {
+    if (!navigator.mediaDevices?.enumerateDevices) {
+      throw new Error("Este ambiente nao disponibilizou a API de dispositivos de audio.");
+    }
+
+    const permissionStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    permissionStream.getTracks().forEach((track) => track.stop());
+
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    state.devices = devices
+      .filter((device) => device.kind === "audioinput")
+      .map((device, index) => ({
+        deviceId: device.deviceId,
+        label: device.label || `Dispositivo de audio ${index + 1}`
+      }));
+    state.devicesLoaded = true;
+
+    if (state.devices.length === 0) {
+      state.deviceError = "Nenhum dispositivo de entrada de audio foi encontrado.";
+    }
+  } catch (error) {
+    state.devices = [];
+    state.devicesLoaded = true;
+    state.deviceError = readableError(error);
+    showMessage(`Nao foi possivel carregar os dispositivos de audio: ${state.deviceError}`, "error");
+  }
 }
 
 function applySnapshot(snapshot: AppSnapshot): void {
@@ -172,39 +210,47 @@ function applySnapshot(snapshot: AppSnapshot): void {
 }
 
 async function startListening(): Promise<void> {
+  clearMessage();
   const selected = selectedDevice();
   if (!selected) {
-    alert("Selecione um dispositivo de audio.");
+    showMessage("Selecione um dispositivo de audio antes de iniciar.", "error");
     return;
   }
 
   if (!state.configuration.holyricsPath) {
+    showMessage("Configure o local do Holyrics antes de iniciar.", "error");
     openSettings();
     return;
   }
 
-  state.mediaStream = await navigator.mediaDevices.getUserMedia({
-    audio: {
-      deviceId: selected.deviceId ? { exact: selected.deviceId } : undefined,
-      channelCount: 1,
-      sampleRate: 16000,
-      noiseSuppression: true,
-      echoCancellation: false
-    }
-  });
+  try {
+    state.mediaStream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        deviceId: selected.deviceId ? { exact: selected.deviceId } : undefined,
+        channelCount: 1,
+        sampleRate: 16000,
+        noiseSuppression: true,
+        echoCancellation: false
+      }
+    });
 
-  startMeter(state.mediaStream);
-  startPcmStreaming(state.mediaStream);
-  await window.bibleListener.startListening(selected);
+    await window.bibleListener.startListening(selected);
+    startMeter(state.mediaStream);
+    startPcmStreaming(state.mediaStream);
+  } catch (error) {
+    stopLocalAudio();
+    await window.bibleListener.stopListening().catch(() => undefined);
+    showMessage(`Nao foi possivel iniciar a escuta: ${readableError(error)}`, "error");
+  }
 }
 
 async function stopListening(): Promise<void> {
-  state.processor?.disconnect();
-  state.audioContext?.close();
-  state.mediaStream?.getTracks().forEach((track) => track.stop());
-  if (state.meterFrame) cancelAnimationFrame(state.meterFrame);
-  elements.meterBar.style.width = "0%";
-  await window.bibleListener.stopListening();
+  try {
+    stopLocalAudio();
+    await window.bibleListener.stopListening();
+  } catch (error) {
+    showMessage(`Nao foi possivel parar a escuta: ${readableError(error)}`, "error");
+  }
 }
 
 async function finishSession(): Promise<void> {
@@ -229,24 +275,38 @@ function openSettings(): void {
 }
 
 async function chooseHolyricsPath(): Promise<void> {
-  const path = await window.bibleListener.chooseHolyricsPath();
-  if (path) elements.holyricsPath.value = path;
+  try {
+    const path = await window.bibleListener.chooseHolyricsPath();
+    if (path) elements.holyricsPath.value = path;
+  } catch (error) {
+    showMessage(`Nao foi possivel escolher o local do Holyrics: ${readableError(error)}`, "error");
+  }
 }
 
 async function saveSettings(): Promise<void> {
-  state.configuration = await window.bibleListener.saveConfiguration({
-    gladiaApiKey: elements.gladiaKey.value.trim() || undefined,
-    geminiApiKey: elements.geminiKey.value.trim() || undefined,
-    holyricsPath: elements.holyricsPath.value.trim() || undefined,
-    bibleVersion: elements.bibleVersion.value.trim() || "NAA"
-  });
-  render();
+  try {
+    state.configuration = await window.bibleListener.saveConfiguration({
+      gladiaApiKey: elements.gladiaKey.value.trim() || undefined,
+      geminiApiKey: elements.geminiKey.value.trim() || undefined,
+      holyricsPath: elements.holyricsPath.value.trim() || undefined,
+      bibleVersion: elements.bibleVersion.value.trim() || "NAA"
+    });
+    clearMessage();
+    render();
+    elements.settingsDialog.close();
+  } catch (error) {
+    showMessage(`Nao foi possivel salvar as configuracoes: ${readableError(error)}`, "error");
+  }
 }
 
 async function testConnections(): Promise<void> {
-  elements.connectionResult.textContent = "Testando...";
-  const result = await window.bibleListener.testConnections();
-  elements.connectionResult.textContent = `Gladia: ${result.gladia ? "ok" : "falhou"} | Gemini: ${result.gemini ? "ok" : "falhou"}`;
+  try {
+    elements.connectionResult.textContent = "Testando...";
+    const result = await window.bibleListener.testConnections();
+    elements.connectionResult.textContent = `Gladia: ${result.gladia ? "ok" : "falhou"} | Gemini: ${result.gemini ? "ok" : "falhou"}`;
+  } catch (error) {
+    elements.connectionResult.textContent = `Falha no teste: ${readableError(error)}`;
+  }
 }
 
 function selectedDevice(): AudioInputDevice | undefined {
@@ -254,9 +314,9 @@ function selectedDevice(): AudioInputDevice | undefined {
 }
 
 function startMeter(stream: MediaStream): void {
-  state.audioContext = new AudioContext();
-  const source = state.audioContext.createMediaStreamSource(stream);
-  const analyser = state.audioContext.createAnalyser();
+  state.meterContext = new AudioContext();
+  const source = state.meterContext.createMediaStreamSource(stream);
+  const analyser = state.meterContext.createAnalyser();
   analyser.fftSize = 256;
   source.connect(analyser);
   const data = new Uint8Array(analyser.frequencyBinCount);
@@ -271,7 +331,7 @@ function startMeter(stream: MediaStream): void {
 }
 
 function startPcmStreaming(stream: MediaStream): void {
-  const context = state.audioContext ?? new AudioContext();
+  const context = new AudioContext();
   state.audioContext = context;
   const source = context.createMediaStreamSource(stream);
   const processor = context.createScriptProcessor(4096, 1, 1);
@@ -283,6 +343,20 @@ function startPcmStreaming(stream: MediaStream): void {
   source.connect(processor);
   processor.connect(context.destination);
   state.processor = processor;
+}
+
+function stopLocalAudio(): void {
+  state.processor?.disconnect();
+  state.processor = undefined;
+  void state.audioContext?.close();
+  state.audioContext = undefined;
+  void state.meterContext?.close();
+  state.meterContext = undefined;
+  state.mediaStream?.getTracks().forEach((track) => track.stop());
+  state.mediaStream = undefined;
+  if (state.meterFrame) cancelAnimationFrame(state.meterFrame);
+  state.meterFrame = undefined;
+  elements.meterBar.style.width = "0%";
 }
 
 function downsampleTo16BitPcm(input: Float32Array, sourceRate: number, targetRate: number): Int16Array {
@@ -333,7 +407,7 @@ function showReferenceChoices(references: BibleReference[]): void {
 function render(): void {
   elements.statusPill.textContent = state.status === "listening" ? "OUVINDO" : "PARADO";
   elements.statusPill.dataset.status = state.status;
-  elements.listenButton.disabled = state.status === "listening";
+  elements.listenButton.disabled = state.status === "listening" || state.devices.length === 0;
   elements.stopButton.disabled = state.status === "stopped";
   elements.lineCounter.textContent = String(state.lines.length);
   elements.lastReference.textContent = state.lastReference ? formatReference(state.lastReference) : "Nenhuma";
@@ -343,6 +417,26 @@ function render(): void {
 function renderDevices(): void {
   const selected = state.configuration.audioDeviceId;
   elements.deviceSelect.innerHTML = "";
+
+  if (!state.devicesLoaded) {
+    const option = document.createElement("option");
+    option.textContent = "Carregando dispositivos...";
+    option.value = "";
+    elements.deviceSelect.append(option);
+    elements.deviceSelect.disabled = true;
+    return;
+  }
+
+  if (state.devices.length === 0) {
+    const option = document.createElement("option");
+    option.textContent = state.deviceError ? "Nenhum dispositivo disponivel" : "Nenhum dispositivo encontrado";
+    option.value = "";
+    elements.deviceSelect.append(option);
+    elements.deviceSelect.disabled = true;
+    return;
+  }
+
+  elements.deviceSelect.disabled = state.status === "listening";
   state.devices.forEach((device) => {
     const option = document.createElement("option");
     option.value = device.deviceId;
@@ -362,4 +456,20 @@ function renderTranscriptLine(line: TranscriptLine): void {
 
 function formatReference(reference: BibleReference): string {
   return `${reference.book} ${reference.chapter}:${reference.verse} ${reference.version}`;
+}
+
+function showMessage(message: string, tone: "error" | "info" = "info"): void {
+  elements.appMessage.textContent = message;
+  elements.appMessage.dataset.tone = tone;
+  elements.appMessage.hidden = false;
+}
+
+function clearMessage(): void {
+  elements.appMessage.textContent = "";
+  elements.appMessage.hidden = true;
+}
+
+function readableError(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  return String(error);
 }

@@ -1,4 +1,4 @@
-import { app } from "electron";
+import * as electron from "electron";
 import { AudioService } from "./services/AudioService.js";
 import { BibleCommandDetector } from "./services/BibleCommandDetector.js";
 import { ConfigurationService } from "./services/ConfigurationService.js";
@@ -13,7 +13,13 @@ import { WindowService } from "./services/WindowService.js";
 
 let windowService: WindowService | undefined;
 
+const { app, session } = electron;
+
 app.whenReady().then(() => {
+  session.defaultSession.setPermissionRequestHandler((_webContents, permission, callback) => {
+    callback(permission === "media");
+  });
+
   const logger = new LoggerService();
   const configuration = new ConfigurationService(logger);
   const audio = new AudioService();

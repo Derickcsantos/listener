@@ -1,4 +1,4 @@
-import { dialog } from "electron";
+import * as electron from "electron";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { TranscriptLine } from "../../types/domain.js";
@@ -6,7 +6,7 @@ import type { IExportService } from "../interfaces/services.js";
 
 export class ExportService implements IExportService {
   async exportTranscript(lines: TranscriptLine[]): Promise<string | undefined> {
-    const result = await dialog.showOpenDialog({
+    const result = await electron.dialog.showOpenDialog({
       title: "Escolha onde salvar a transcricao",
       properties: ["openDirectory", "createDirectory"]
     });

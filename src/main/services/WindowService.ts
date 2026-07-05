@@ -1,4 +1,4 @@
-import { BrowserWindow, app, dialog, ipcMain } from "electron";
+import * as electron from "electron";
 import { join } from "node:path";
 import type { AppStatus, AudioInputDevice, BibleReference } from "../../types/domain.js";
 import type {
@@ -14,7 +14,7 @@ import type {
 } from "../interfaces/services.js";
 
 export class WindowService {
-  private mainWindow?: BrowserWindow;
+  private mainWindow?: electron.BrowserWindow;
   private status: AppStatus = "stopped";
   private lastOpenedReference?: BibleReference;
   private readonly openedReferences = new Map<string, number>();
@@ -32,14 +32,14 @@ export class WindowService {
   ) {}
 
   createMainWindow(): void {
-    this.mainWindow = new BrowserWindow({
+    this.mainWindow = new electron.BrowserWindow({
       width: 1180,
       height: 780,
       minWidth: 900,
       minHeight: 640,
       title: "Bible Listener",
       webPreferences: {
-        preload: join(app.getAppPath(), "dist/preload/preload.js"),
+        preload: join(electron.app.getAppPath(), "dist/preload/preload.js"),
         contextIsolation: true,
         nodeIntegration: false
       }
@@ -48,7 +48,7 @@ export class WindowService {
     if (process.env.VITE_DEV_SERVER_URL) {
       void this.mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL);
     } else {
-      void this.mainWindow.loadFile(join(app.getAppPath(), "dist/renderer/index.html"));
+      void this.mainWindow.loadFile(join(electron.app.getAppPath(), "dist/renderer/index.html"));
     }
   }
 
@@ -58,23 +58,23 @@ export class WindowService {
     });
     this.gladiaService.on("error", (...args: unknown[]) => this.emitError(String(args[0] ?? "Erro no Gladia.")));
 
-    ipcMain.handle("app:getSnapshot", () => ({
+    electron.ipcMain.handle("app:getSnapshot", () => ({
       status: this.status,
       configuration: this.configurationService.get(),
       transcriptLines: this.transcriptService.all(),
       lastOpenedReference: this.lastOpenedReference
     }));
 
-    ipcMain.handle("config:save", (_event, configuration) => this.configurationService.update(configuration));
-    ipcMain.handle("config:chooseHolyricsPath", async () => {
-      const result = await dialog.showOpenDialog({
+    electron.ipcMain.handle("config:save", (_event, configuration) => this.configurationService.update(configuration));
+    electron.ipcMain.handle("config:chooseHolyricsPath", async () => {
+      const result = await electron.dialog.showOpenDialog({
         title: "Local do Holyrics",
         properties: ["openDirectory"]
       });
       return result.canceled ? undefined : result.filePaths[0];
     });
 
-    ipcMain.handle("listening:start", async (_event, device: AudioInputDevice) => {
+    electron.ipcMain.handle("listening:start", async (_event, device: AudioInputDevice) => {
       this.audioService.setSelectedDevice(device);
       this.configurationService.update({ audioDeviceId: device.deviceId, audioDeviceLabel: device.label });
       await this.gladiaService.connect();
@@ -82,27 +82,27 @@ export class WindowService {
       this.mainWindow?.webContents.send("status:changed", this.status);
     });
 
-    ipcMain.handle("listening:stop", async () => {
+    electron.ipcMain.handle("listening:stop", async () => {
       await this.gladiaService.disconnect();
       this.status = "stopped";
       this.mainWindow?.webContents.send("status:changed", this.status);
     });
 
-    ipcMain.handle("audio:chunk", async (_event, chunk: ArrayBuffer) => {
+    electron.ipcMain.handle("audio:chunk", async (_event, chunk: ArrayBuffer) => {
       if (this.status === "listening") {
         await this.gladiaService.sendAudioChunk(chunk);
       }
     });
 
-    ipcMain.handle("session:finish", async () => {
+    electron.ipcMain.handle("session:finish", async () => {
       const path = await this.exportService.exportTranscript(this.transcriptService.all());
       if (path) this.transcriptService.clear();
       return path;
     });
 
-    ipcMain.handle("reference:open", async (_event, reference: BibleReference) => this.openReference(reference));
-    ipcMain.handle("reference:ignoreMultiple", () => undefined);
-    ipcMain.handle("connections:test", async () => {
+    electron.ipcMain.handle("reference:open", async (_event, reference: BibleReference) => this.openReference(reference));
+    electron.ipcMain.handle("reference:ignoreMultiple", () => undefined);
+    electron.ipcMain.handle("connections:test", async () => {
       const errors: string[] = [];
       const gladia = await this.gladiaService.testConnection().catch((error) => {
         errors.push(String(error));

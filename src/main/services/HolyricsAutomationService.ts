@@ -1,4 +1,4 @@
-import { clipboard } from "electron";
+import * as electron from "electron";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import type { BibleReference } from "../../types/domain.js";
@@ -20,7 +20,7 @@ export class HolyricsAutomationService implements IHolyricsAutomationService {
     }
 
     const query = formatReference(reference);
-    clipboard.writeText(query);
+    electron.clipboard.writeText(query);
 
     const script = `
       Add-Type -AssemblyName System.Windows.Forms
