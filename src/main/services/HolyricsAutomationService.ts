@@ -1,10 +1,16 @@
 import * as electron from "electron";
 import { execFile } from "node:child_process";
-import { access, stat } from "node:fs/promises";
-import { join } from "node:path";
+import type { Dirent } from "node:fs";
+import { access, readdir, stat } from "node:fs/promises";
+import { basename, extname, join } from "node:path";
 import { promisify } from "node:util";
 import type { BibleReference } from "../../types/domain.js";
-import type { IConfigurationService, IHolyricsAutomationService, ILoggerService } from "../interfaces/services.js";
+import type {
+  HolyricsConnectionStatus,
+  IConfigurationService,
+  IHolyricsAutomationService,
+  ILoggerService
+} from "../interfaces/services.js";
 import { formatReference } from "../utils/text.js";
 
 const execFileAsync = promisify(execFile);
@@ -55,45 +61,110 @@ export class HolyricsAutomationService implements IHolyricsAutomationService {
     }
   }
 
-  async testConnection(holyricsPath = this.configurationService.get().holyricsPath): Promise<boolean> {
-    if (!holyricsPath) return false;
+  async testConnection(holyricsPath = this.configurationService.get().holyricsPath): Promise<HolyricsConnectionStatus> {
+    if (!holyricsPath) {
+      return { executableFound: false, appRunning: false };
+    }
 
     try {
-      await resolveHolyricsExecutable(holyricsPath);
-      if (process.platform !== "win32") {
-        return true;
-      }
-
-      const script = `
-        $process = Get-Process | Where-Object { $_.ProcessName -like "Holyrics*" -and $_.MainWindowHandle -ne 0 } | Select-Object -First 1
-        if ($process) { exit 0 }
-        exit 1
-      `;
-      await execFileAsync("powershell.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", script], {
-        windowsHide: true
-      });
-      return true;
+      const executablePath = await resolveHolyricsExecutable(holyricsPath);
+      const appRunning = process.platform === "win32" ? await isHolyricsRunning() : true;
+      return { executableFound: true, appRunning, executablePath };
     } catch (error) {
       this.logger.warn("Holyrics connection test failed.", error);
-      return false;
+      return { executableFound: false, appRunning: false };
     }
   }
 }
 
 async function resolveHolyricsExecutable(holyricsPath: string): Promise<string> {
-  const info = await stat(holyricsPath);
+  const normalizedPath = cleanWindowsPath(holyricsPath);
+  const info = await stat(normalizedPath);
   const candidates = info.isDirectory()
-    ? [join(holyricsPath, "Holyrics.exe"), join(holyricsPath, "holyrics.exe")]
-    : [holyricsPath];
+    ? [
+        join(normalizedPath, "Holyrics.exe"),
+        join(normalizedPath, "holyrics.exe"),
+        join(normalizedPath, "app", "Holyrics.exe"),
+        join(normalizedPath, "bin", "Holyrics.exe")
+      ]
+    : [normalizedPath];
 
   for (const candidate of candidates) {
     try {
-      await access(candidate);
+      await assertHolyricsExecutable(candidate);
       return candidate;
     } catch {
       // Try the next common executable name.
     }
   }
 
+  if (info.isDirectory()) {
+    const recursiveMatch = await findHolyricsExecutable(normalizedPath, 3);
+    if (recursiveMatch) return recursiveMatch;
+  }
+
   throw new Error("Executavel do Holyrics nao encontrado no caminho informado.");
+}
+
+async function assertHolyricsExecutable(candidate: string): Promise<void> {
+  const info = await stat(candidate);
+  if (!info.isFile()) {
+    throw new Error("Caminho encontrado nao e arquivo.");
+  }
+  if (process.platform === "win32" && extname(candidate).toLowerCase() !== ".exe") {
+    throw new Error("Arquivo encontrado nao e executavel .exe.");
+  }
+  if (!basename(candidate).toLowerCase().includes("holyrics")) {
+    throw new Error("Executavel encontrado nao parece ser o Holyrics.");
+  }
+  await access(candidate);
+}
+
+async function findHolyricsExecutable(directory: string, depth: number): Promise<string | undefined> {
+  if (depth < 0) return undefined;
+
+  let entries: Dirent[];
+  try {
+    entries = await readdir(directory, { withFileTypes: true });
+  } catch {
+    return undefined;
+  }
+
+  for (const entry of entries) {
+    if (!entry.isFile()) continue;
+    const candidate = join(directory, entry.name);
+    if (entry.name.toLowerCase() === "holyrics.exe") {
+      await assertHolyricsExecutable(candidate);
+      return candidate;
+    }
+  }
+
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    const match = await findHolyricsExecutable(join(directory, entry.name), depth - 1);
+    if (match) return match;
+  }
+
+  return undefined;
+}
+
+async function isHolyricsRunning(): Promise<boolean> {
+  const script = `
+    $process = Get-Process | Where-Object { $_.ProcessName -like "Holyrics*" -and $_.MainWindowHandle -ne 0 } | Select-Object -First 1
+    if ($process) { exit 0 }
+    exit 1
+  `;
+
+  try {
+    await execFileAsync("powershell.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", script], {
+      windowsHide: true
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function cleanWindowsPath(value: string): string {
+  return value.trim().replace(/^["']|["']$/g, "");
 }

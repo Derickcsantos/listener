@@ -10,7 +10,8 @@ import type {
   IGladiaService,
   IHolyricsAutomationService,
   ILoggerService,
-  ITranscriptService
+  ITranscriptService,
+  HolyricsConnectionStatus
 } from "../interfaces/services.js";
 
 export class WindowService {
@@ -108,6 +109,7 @@ export class WindowService {
     electron.ipcMain.handle("reference:ignoreMultiple", () => undefined);
     electron.ipcMain.handle("connections:test", async (_event, configuration: Partial<AppConfiguration> = {}) => {
       const errors: string[] = [];
+      const warnings: string[] = [];
       const current = this.configurationService.get();
       const testConfiguration = { ...current, ...configuration };
 
@@ -119,12 +121,27 @@ export class WindowService {
         errors.push(`Gemini: ${String(error)}`);
         return false;
       });
-      const holyrics = await this.holyricsAutomationService.testConnection(testConfiguration.holyricsPath).catch((error) => {
+      const holyricsStatus = await this.holyricsAutomationService.testConnection(testConfiguration.holyricsPath).catch((error) => {
         errors.push(`Holyrics: ${String(error)}`);
-        return false;
+        return { executableFound: false, appRunning: false } satisfies HolyricsConnectionStatus;
       });
+      const holyrics = holyricsStatus.executableFound;
 
-      return { gladia, gemini, holyrics, errors };
+      if (!testConfiguration.geminiApiKey) {
+        errors.push("Gemini: informe uma API key.");
+      } else if (!gemini) {
+        errors.push("Gemini: chave invalida, sem permissao, modelo indisponivel ou bloqueio de rede.");
+      }
+
+      if (!testConfiguration.holyricsPath) {
+        errors.push("Holyrics: informe a pasta de instalacao ou o caminho do Holyrics.exe.");
+      } else if (!holyricsStatus.executableFound) {
+        errors.push("Holyrics: nao encontrei Holyrics.exe no caminho informado.");
+      } else if (!holyricsStatus.appRunning) {
+        warnings.push(`Holyrics: executavel encontrado em ${holyricsStatus.executablePath}, mas o Holyrics precisa estar aberto para automacao.`);
+      }
+
+      return { gladia, gemini, holyrics, errors, warnings };
     });
   }
 

@@ -313,7 +313,8 @@ async function testConnections(): Promise<void> {
       `Gemini: ${result.gemini ? "ok" : "falhou"}`,
       `Holyrics: ${result.holyrics ? "ok" : "falhou"}`
     ].join(" | ");
-    elements.connectionResult.textContent = result.errors.length > 0 ? `${summary} | ${result.errors.join(" | ")}` : summary;
+    const details = [...result.errors, ...result.warnings].join(" | ");
+    elements.connectionResult.textContent = details ? `${summary} | ${details}` : summary;
   } catch (error) {
     elements.connectionResult.textContent = `Falha no teste: ${readableError(error)}`;
   }

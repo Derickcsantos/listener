@@ -5,6 +5,7 @@ export interface ConnectionTestResult {
   gemini: boolean;
   holyrics: boolean;
   errors: string[];
+  warnings: string[];
 }
 
 export interface BibleListenerApi {

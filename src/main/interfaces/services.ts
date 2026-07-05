@@ -1,5 +1,11 @@
 import type { AppConfiguration, AudioInputDevice, BibleReference, DetectionResult, TranscriptLine } from "../../types/domain.js";
 
+export interface HolyricsConnectionStatus {
+  executableFound: boolean;
+  appRunning: boolean;
+  executablePath?: string;
+}
+
 export interface IConfigurationService {
   get(): AppConfiguration;
   update(configuration: Partial<AppConfiguration>): AppConfiguration;
@@ -35,7 +41,7 @@ export interface IGladiaService {
 
 export interface IHolyricsAutomationService {
   open(reference: BibleReference): Promise<void>;
-  testConnection(holyricsPath?: string): Promise<boolean>;
+  testConnection(holyricsPath?: string): Promise<HolyricsConnectionStatus>;
 }
 
 export interface IExportService {

@@ -9,6 +9,8 @@ interface GeminiResponse {
   }>;
 }
 
+const geminiModels = ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-flash-latest", "gemini-2.5-flash"];
+
 export class GeminiService implements IGeminiService {
   constructor(
     private readonly configurationService: IConfigurationService,
@@ -28,26 +30,13 @@ export class GeminiService implements IGeminiService {
     ].join("\n");
 
     try {
-      const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: prompt }] }],
-            generationConfig: {
-              temperature: 0,
-              responseMimeType: "application/json"
-            }
-          })
+      const payload = await this.generateContent(apiKey, {
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: {
+          temperature: 0,
+          responseMimeType: "application/json"
         }
-      );
-
-      if (!response.ok) {
-        throw new Error(`Gemini responded with ${response.status}`);
-      }
-
-      const payload = (await response.json()) as GeminiResponse;
+      });
       const raw = payload.candidates?.[0]?.content?.parts?.[0]?.text;
       if (!raw) return [];
 
@@ -73,27 +62,46 @@ export class GeminiService implements IGeminiService {
     if (!apiKey) return false;
 
     try {
-      const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: "Responda somente OK." }] }],
-            generationConfig: { temperature: 0 }
-          })
-        }
-      );
-
-      if (!response.ok) {
-        const body = await response.text().catch(() => "");
-        throw new Error(`Gemini respondeu ${response.status}: ${body.slice(0, 200)}`);
-      }
-
+      await this.generateContent(apiKey, {
+        contents: [{ parts: [{ text: "Responda somente OK." }] }],
+        generationConfig: { temperature: 0 }
+      });
       return true;
     } catch (error) {
       this.logger.warn("Gemini connection test failed.", error);
       return false;
     }
+  }
+
+  private async generateContent(apiKey: string, body: unknown): Promise<GeminiResponse> {
+    const errors: string[] = [];
+
+    for (const model of geminiModels) {
+      try {
+        const response = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body)
+          }
+        );
+
+        if (!response.ok) {
+          const errorBody = await response.text().catch(() => "");
+          errors.push(`${model}: HTTP ${response.status} ${errorBody.slice(0, 180)}`);
+          if (response.status === 400 || response.status === 401 || response.status === 403) {
+            continue;
+          }
+          continue;
+        }
+
+        return (await response.json()) as GeminiResponse;
+      } catch (error) {
+        errors.push(`${model}: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+
+    throw new Error(`Nenhum modelo Gemini respondeu com sucesso. ${errors.join(" | ")}`);
   }
 }
