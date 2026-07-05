@@ -1,0 +1,47 @@
+{
+  "name": "bible-listener",
+  "version": "0.1.0",
+  "description": "Desktop listener that detects spoken Bible references and opens them in Holyrics.",
+  "main": "dist/main/main.js",
+  "author": "Bible Listener",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently \"npm:dev:renderer\" \"npm:dev:main\"",
+    "dev:renderer": "vite --host 127.0.0.1",
+    "dev:main": "tsc -p tsconfig.main.json --watch --preserveWatchOutput",
+    "build": "tsc -p tsconfig.main.json && vite build",
+    "start": "electron .",
+    "dist": "npm run build && electron-builder",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.main.json --noEmit"
+  },
+  "dependencies": {
+    "@google/generative-ai": "^0.24.1",
+    "electron-store": "^10.0.1",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "@types/ws": "^8.5.13",
+    "concurrently": "^9.1.0",
+    "electron": "^33.2.1",
+    "electron-builder": "^25.1.8",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.3"
+  },
+  "build": {
+    "appId": "com.biblelistener.desktop",
+    "productName": "Bible Listener",
+    "files": [
+      "dist/**/*",
+      "package.json"
+    ],
+    "directories": {
+      "buildResources": "assets",
+      "output": "release"
+    },
+    "win": {
+      "target": "nsis"
+    }
+  }
+}
